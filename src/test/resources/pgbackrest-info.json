@@ -1,0 +1,84 @@
+[
+    {
+        "archive": [
+            {
+                "database": {
+                    "id": 1,
+                    "repo-key": 1
+                },
+                "id": "18-1",
+                "max": "000000010000000000000009",
+                "min": "000000010000000000000001"
+            }
+        ],
+        "backup": [
+            {
+                "archive": {
+                    "start": "000000010000000000000007",
+                    "stop": "000000010000000000000007"
+                },
+                "backrest": {
+                    "format": 5,
+                    "version": "2.60.0"
+                },
+                "database": {
+                    "id": 1,
+                    "repo-key": 1
+                },
+                "error": false,
+                "info": {
+                    "delta": 32451632,
+                    "repository": {
+                        "delta": 3976576,
+                        "size": 3976576
+                    },
+                    "size": 32451632
+                },
+                "label": "20261112-193917F",
+                "lsn": {
+                    "start": "0/7000028",
+                    "stop": "0/7000158"
+                },
+                "prior": null,
+                "reference": null,
+                "timestamp": {
+                    "start": 1794512357,
+                    "stop": 1794512359
+                },
+                "type": "full"
+            }
+        ],
+        "cipher": "aes-256-cbc",
+        "db": [
+            {
+                "id": 1,
+                "repo-key": 1,
+                "system-id": 7707368244494622763,
+                "version": "18"
+            }
+        ],
+        "name": "seatwave",
+        "repo": [
+            {
+                "cipher": "aes-256-cbc",
+                "key": 1,
+                "status": {
+                    "code": 0,
+                    "message": "ok"
+                }
+            }
+        ],
+        "status": {
+            "code": 0,
+            "lock": {
+                "backup": {
+                    "held": false
+                },
+                "restore": {
+                    "held": false
+                }
+            },
+            "message": "ok"
+        }
+    }
+]

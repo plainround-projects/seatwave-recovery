@@ -1,0 +1,55 @@
+BOOKINGS DATABASE AFTER LOSING region-a: RPO AND RTO FROM THE MECHANISM
+(2 clusters of 200,000 MB restored in parallel at 250 MB/s; 10,000 MB of log per cluster a day; replay at 24 MB/s; times in minutes:seconds)
+
+backup and restore, $21.20 a month over one region
+  RPO 10.0 min: log uploaded every 5 min (RDS) + copied to region-b (assumed 5 min)
+  detect        3:20  fast-burn page 20 s + acknowledge 3 min (Module 37)
+  decide       10:00  confirm a region event and declare (assumed)
+  provision    30:00  rebuild the environment from code (assumed)
+  restore      13:20  200,000 MB at 250 MB/s, clusters in parallel
+  replay        6:56  a day of log, 10,000 MB at 24 MB/s (worst case)
+  verify       13:20  the checker reads the cluster once at 250 MB/s
+  redirect      1:30  health check 3 x 10 s + TTL 60 s (Module 6)
+  RTO          78:26
+
+pilot light, $706.64 a month over one region
+  RPO 100 ms: a logical-replication copy per cluster in region-b, 100 ms behind (assumed)
+  detect        3:20  fast-burn page 20 s + acknowledge 3 min (Module 37)
+  decide       10:00  confirm a region event and declare (assumed)
+  provision    30:00  everything but the data, from code (assumed)
+  promote       5:00  promote both replicas (Module 34's 5 min)
+  verify        2:00  counts and checksums on the critical tables (assumed)
+  redirect      1:30  health check 3 x 10 s + TTL 60 s (Module 6)
+  RTO          51:50
+
+warm standby, $1,270.42 a month over one region
+  RPO 100 ms: the same replicas; 3 nodes and the cluster already run
+  detect        3:20  fast-burn page 20 s + acknowledge 3 min (Module 37)
+  decide       10:00  confirm a region event and declare (assumed)
+  provision     8:00  scale nodes from 3 to 10 (Module 34's 8 min)
+  promote       5:00  promote both replicas (Module 34's 5 min)
+  verify        2:00  counts and checksums on the critical tables (assumed)
+  redirect      1:30  health check 3 x 10 s + TTL 60 s (Module 6)
+  RTO          29:50
+
+active-active, $4,455.64 a month over one region
+  RPO 100 ms: each event's home region copies to the other, 100 ms behind
+  detect        0:20  the same page; the failover is pre-approved
+  promote       2:00  move the lost region's events home (assumed)
+  verify        1:00  counts on the moved events (assumed)
+  redirect      1:30  health check 3 x 10 s + TTL 60 s (Module 6)
+  RTO           4:50
+
+AGAINST THE OBJECTIVE FOR BOOKINGS (RPO 5.0 min, RTO 60:00) at 1,500 bookings a second at the peak
+tier                         RPO       RTO  at risk, peak  RPO ok  RTO ok
+backup and restore      10.0 min     78:26        900,000      NO      NO
+pilot light               100 ms     51:50            150     yes     yes
+warm standby              100 ms     29:50            150     yes     yes
+active-active             100 ms      4:50            150     yes     yes
+
+BREAK-EVEN: the cost of a minute down above which the faster tier is the cheaper one (Module 34's formula, computed RTOs)
+  backup and restore     -> pilot light            $615.97 a minute
+  pilot light            -> warm standby           $612.56 a minute
+  warm standby           -> active-active          $3,055.34 a minute
+
+Of backup and restore's 78:26, 33:36 moves bytes (restore, replay, verify) and 44:50 is people, code and DNS.

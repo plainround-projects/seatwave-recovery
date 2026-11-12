@@ -1,0 +1,38 @@
+
+1. kill shard-37's writer (the client reconnects)
+  hypothesis: holds on shard-37 are good again within 60 s, no acknowledged confirm is lost, and the other 63 shards do not move
+  steady state: hold SLI (not 5xx and <= 300 ms), 100 holds/s; blast radius 1 of 64 shards (1.6 holds/s)
+  abort conditions: [EXPERIMENT_GROUP_NOT_RECOVERED, FAST_BURN_PAGE, EXPERIMENT_BUDGET_SPENT, ACKNOWLEDGED_CONFIRM_LOST, PRODUCTION_SLI_MOVES]
+  experiment group failing for 35 s after the fault; aborted never
+  bad holds 55 = 0.11% of production's month's budget; control group bad holds 0
+  fast-burn page: did not fire; slow-burn page: did not fire
+  verdict: hypothesis CONFIRMED
+
+2. the same, as the system really behaves: the pool keeps its old connections
+  hypothesis: holds on shard-37 are good again within 60 s, no acknowledged confirm is lost, and the other 63 shards do not move
+  steady state: hold SLI (not 5xx and <= 300 ms), 100 holds/s; blast radius 1 of 64 shards (1.6 holds/s)
+  abort conditions: [EXPERIMENT_GROUP_NOT_RECOVERED, FAST_BURN_PAGE, EXPERIMENT_BUDGET_SPENT, ACKNOWLEDGED_CONFIRM_LOST, PRODUCTION_SLI_MOVES]
+  experiment group failing for 138 s after the fault; aborted at 61 s by EXPERIMENT_GROUP_NOT_RECOVERED
+  bad holds 216 = 0.43% of production's month's budget; control group bad holds 0
+  fast-burn page: did not fire; slow-burn page: did not fire
+  verdict: hypothesis REFUTED
+
+3. kill the writer of seatwave-db-a (32 shards), abort only on a lost confirm
+  hypothesis: the same, for 32 shards
+  steady state: hold SLI (not 5xx and <= 300 ms), 100 holds/s; blast radius 32 of 64 shards (50.0 holds/s)
+  abort conditions: [ACKNOWLEDGED_CONFIRM_LOST]
+  experiment group failing for 1800 s after the fault; aborted never
+  bad holds 90,000 = 180.00% of production's month's budget; control group bad holds 0
+  fast-burn page: fired at 103 s; slow-burn page: fired at 259 s
+  verdict: hypothesis REFUTED
+
+4. game day in staging: a fault script blocks every shard's database port for 180 s
+  hypothesis: the hold fast-burn page fires within 60 s and the slow-burn page within 150 s
+  steady state: hold SLI (not 5xx and <= 300 ms), 100 holds/s; blast radius 64 of 64 shards (100.0 holds/s)
+  abort conditions: [PRODUCTION_SLI_MOVES]
+  experiment group failing for 180 s after the fault; aborted never
+  bad holds 18,000 = 36.00% of staging's (same SLO) month's budget; no control group (every shard)
+  fast-burn page: fired at 51 s; slow-burn page: fired at 129 s
+  verdict: hypothesis CONFIRMED
+
+refused: '5. kill a writer with no abort conditions' has no abort condition

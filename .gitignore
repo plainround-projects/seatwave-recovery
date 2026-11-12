@@ -1,0 +1,17 @@
+.gradle/
+build/
+out/
+*.log
+.DS_Store
+.idea/
+*.iml
+.env
+# The store's keys, the database passwords, the cipher passphrase and the lab certificates are
+# generated into .secrets on every machine and never committed. Not under build/: "./gradlew clean"
+# would delete them while the stack uses them.
+.secrets/
+# Measured runs (scripts/measure.sh) are this machine's results, kept out of the build folder.
+measurements/
+*.password
+*.key
+*.pem

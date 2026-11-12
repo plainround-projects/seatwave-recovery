@@ -1,0 +1,12 @@
+<!-- The lab programs print their results themselves; the pool's own messages show only problems. -->
+<configuration>
+  <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+    <target>System.err</target>
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS,UTC} %-5level %logger{20} - %msg%n</pattern>
+    </encoder>
+  </appender>
+  <root level="WARN">
+    <appender-ref ref="console"/>
+  </root>
+</configuration>

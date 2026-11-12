@@ -1,0 +1,42 @@
+POINT-IN-TIME RESTORE DRILLS on real files (times UTC on 10 November 2026; segments of 64 records or 60 s, framed with CRC32C)
+base backups at 09:00:00 and 10:00:00; bad DELETE of section A at 10:41:07
+
+1. Undo the bad delete: restore the 10:00 backup to just before 10:41:07
+   archive: 113 segments, 2696 records; 0 records never archived
+   restore: replay ended at REACHED_TARGET
+   recovered 1553 booking rows; last change replayed LSN 2039 at 10:41:05; newest heartbeat 10:41:00
+   truth at 10:41:07: 1553 rows; missing from the restore: 0
+   rows of the bad delete brought back: 517 of 517
+   not in the restored copy: 117 bookings made after 10:41:07 (still in the archive and in production)
+   checker: DECLARED GOOD, 1553 rows match the manifest's count and SHA-256
+
+2. The same restore with segment 0000000000000080.seg (the one holding 10:20:00) missing from the archive
+   archive: 113 segments, 2696 records; 0 records never archived
+   restore: STOPPED SHORT, the log jumps from LSN 1249 to 1286: a segment between 0000000000000079.seg and 0000000000000081.seg is missing
+   recovered 895 booking rows; last change replayed LSN 1249 at 10:19:09; newest heartbeat 10:19:00
+   truth at 10:41:07: 1553 rows; missing from the restore: 658
+   rows of the bad delete brought back: 298 of 517
+   not in the restored copy: 117 bookings made after 10:41:07 (still in the archive and in production)
+   checker: REFUSED, replay stopped short: the log jumps from LSN 1249 to 1286: a segment between 0000000000000079.seg and 0000000000000081.seg is missing; row count 895, manifest says 1553; row checksum differs from the manifest
+
+3. The 10:00 backup was never test-restored; one byte of it is damaged
+   archive: 113 segments, 2696 records; 0 records never archived
+   restore: REFUSED, bookings.tsv does not match the manifest (size or SHA-256)
+   checker: REFUSED, backup rejected: bookings.tsv does not match the manifest (size or SHA-256)
+   fall back to the 09:00 backup and replay one more hour of log:
+   archive: 113 segments, 2696 records; 0 records never archived
+   restore: replay ended at REACHED_TARGET
+   recovered 1553 booking rows; last change replayed LSN 2039 at 10:41:05; newest heartbeat 10:41:00
+   truth at 10:41:07: 1553 rows; missing from the restore: 0
+   rows of the bad delete brought back: 517 of 517
+   not in the restored copy: 117 bookings made after 10:41:07 (still in the archive and in production)
+   checker: DECLARED GOOD, 1553 rows match the manifest's count and SHA-256
+
+4. region-a lost at 10:43:30; restore everything that reached the archive in region-b
+   archive: 103 segments, 2113 records; 12 records never archived
+   restore: replay ended at END_OF_ARCHIVE
+   recovered 1615 booking rows; last change replayed LSN 2113 at 10:43:09; newest heartbeat 10:43:00
+   truth at 10:43:30: 1625 rows; missing from the restore: 10
+   lost with region-a: 10 bookings; data loss window 21 s by the last replayed commit, 30 s by the heartbeat
+   bound from the mechanism: archive timeout 60 s + copy lag 5 s = 65 s
+   checker: DECLARED GOOD, 1615 rows match the manifest's count and SHA-256

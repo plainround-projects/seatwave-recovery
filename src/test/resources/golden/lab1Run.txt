@@ -1,0 +1,5 @@
+store                                                          RPO     RTO  got RPO  got RTO  findings
+bookings (seatwave-db-a, seatwave-db-b)                      5 min  60 min    0 min   51 min  none
+vault (transit keys seatwave-tickets, seatwave-contacts)     0 min  60 min    0 min   25 min  none
+ticket PDFs (Module 29's bucket)                           1440 min 240 min   15 min  120 min  none
+seat-map cache (seatwave-cache)                              0 min  10 min    0 min    5 min  no business reason;

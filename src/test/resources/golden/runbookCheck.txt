@@ -1,0 +1,16 @@
+region-b-recovery-draft.tsv, 11 steps, if region-a is lost:
+  step 1 (declare): NEEDS runbook@region-a, which is only in the lost site
+  step 2 (access): NEEDS break-glass-credentials@region-a, which is only in the lost site
+  step 3 (promote): NO VERIFICATION; nobody can say it worked
+  step 4 (environment): NEEDS opentofu-state@region-a, which is only in the lost site
+  step 5 (vault): NEEDS unseal-keys@region-a, which is only in the lost site
+  step 6 (deploy): NEEDS container-images@region-a, which is only in the lost site
+  step 8 (erasure): NO VERIFICATION; nobody can say it worked
+  step 8 (erasure): NEEDS erasure-ledger@region-a, which is only in the lost site
+  step 9 (dns): NO OWNER for 'Point seatwave.example at region-b's load balancer'
+  step 9 (dns): waits for 'smoke', which comes later in the plan
+  step 11 (tell): NEEDS status-page@region-a, which is only in the lost site
+  plan NOT READY: 11 findings
+
+region-b-recovery.tsv, 12 steps, if region-a is lost:
+  plan READY: every step has an owner and a check, and nothing needs region-a

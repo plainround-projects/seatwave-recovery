@@ -1,0 +1,15 @@
+# SeatWave region recovery plan (Module 40): bring bookings back in region-b after losing region-a.
+# Columns: step, action, owner, verification, needs (resource@site+site), after (steps first). '-' means none.
+# Reviewed against RunbookCheckCli for the loss of region-a and of region-b; drilled every quarter (Section 10).
+declare	Declare a region disaster and open the incident with its roles	incident-commander	incident channel open with commander, operations and communications named (Module 37)	runbook@git-host+printed	-
+access	Sign in to the production account in region-b with the break-glass role	platform-on-call	aws sts get-caller-identity names the break-glass role	break-glass-credentials@safe-offline+region-b	declare
+promote	Make the region-b copies of seatwave-db-a and seatwave-db-b writable (stop logical replication, open writes)	database-on-call	subscriptions disabled; sequences advanced past the source; writes to the drill heartbeat table succeed	cross-region-replicas@region-b	access
+check	Run the restore checker on bookings against the drill manifest	database-on-call	checker prints DECLARED GOOD	manifest@region-b+git-host	promote
+erasure	Replay privacy.erasure_ledger entries newer than the restore point (Module 42)	privacy-on-call	every ledger entry after the restore point shows its subject absent from every listed table	erasure-ledger@region-b	check
+policies	Check row-level security is enabled on every protected table and only seatwave_migrator bypasses it (Module 42)	security-on-call	the policy query lists every protected table with RLS on and no other BYPASSRLS role	-	erasure
+environment	Apply the production environment code to region-b	platform-on-call	tofu plan after the apply prints no changes	environment-code@git-host,opentofu-state@region-a+region-b	access
+vault	Restore the vault snapshot in region-b and unseal it	security-on-call	transit keys seatwave-tickets and seatwave-contacts decrypt the test value	vault-snapshot@region-b,unseal-keys@safe-offline	environment
+deploy	Deploy seatwave, payment-service and notification-service	platform-on-call	every pod Ready; readiness checks the promoted databases	container-images@region-a+region-b	environment,vault
+smoke	Hold and confirm one test seat on a test event	booking-lead	201 for the hold and 201 for the confirm; the test booking is cancelled	-	policies,deploy
+dns	Point seatwave.example at region-b's load balancer	platform-on-call	an external probe from a third region gets 200 on GET /v1/events	dns-provider@global	smoke
+tell	Tell fans and venues what was lost: the data loss window and its bookings	support-lead	status page updated; venues e-mailed the window	status-page@third-party	dns

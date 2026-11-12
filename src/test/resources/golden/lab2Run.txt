@@ -1,0 +1,3 @@
+target 14:30:00Z: 1799 rows, 40 of 40 cancelled rows back, checker DECLARED GOOD
+target 14:30:00.500Z: 1800 rows, 40 of 40 cancelled rows back, checker DECLARED GOOD
+target 14:30:01Z: 1760 rows, 0 of 40 cancelled rows back, checker DECLARED GOOD

@@ -1,0 +1,6 @@
+region-b-recovery.tsv, 12 steps, if region-b is lost:
+  step 3 (promote): NEEDS cross-region-replicas@region-b, which is only in the lost site
+  step 5 (erasure): NEEDS erasure-ledger@region-b, which is only in the lost site
+  step 8 (vault): NEEDS vault-snapshot@region-b, which is only in the lost site
+  plan NOT READY: 3 findings
+

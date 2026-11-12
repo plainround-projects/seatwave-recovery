@@ -1,0 +1,193 @@
+# seatwave-recovery (Module 40): a primary that archives its log to an S3-compatible store, the
+# store, an empty instance to restore into, and a second PostgreSQL that holds a logical copy of the
+# bookings tables (the pilot light's mechanism), under the Compose project name seatwave-recovery.
+#
+# Images pinned by tag and digest, checked on Docker Hub on 12 November 2026, each with an arm64
+# variant: the Docker Official Image postgres:18.6-trixie (in postgres.Dockerfile) and
+# rustfs/rustfs:1.0.5 (the project's own image). pgBackRest 2.60.0, the current release (GitHub, 18
+# October 2026), is installed from the PostgreSQL project's Debian repository (apt.postgresql.org,
+# which the official image already trusts) as the pinned package 2.60.0-1.pgdg13+1, so nothing is
+# built from source.
+#
+# The store is RustFS 1.0.5, Module 29's choice. The lab first planned MinIO, which was found on 11
+# November 2026 to be archived and source-only; the owner decided on 12 November 2026 to replace it,
+# and docs/backup-tool-and-store.md records the test of pgBackRest against RustFS. pgBackRest talks
+# to an S3 store over TLS only, so the store serves TLS with a certificate from a throwaway lab
+# authority that scripts/stack.sh generates into .secrets/.
+#
+# One machine has no regions or zones: every service shares the Docker virtual machine's disk and
+# network, so this stack proves mechanisms, never the independence of failures. Nothing runs
+# privileged, nothing uses the host network or the Docker socket; ports are on 127.0.0.1 only, from
+# Module 40's range 24000 to 24099. The engine is shared with other projects, so every service has
+# a memory and CPU limit (2,176 MB of memory in all).
+name: seatwave-recovery
+
+x-postgres: &postgres
+  image: seatwave-recovery/postgres:18.6-pgbackrest-2.60.0
+  build:
+    context: .
+    dockerfile: postgres.Dockerfile
+  environment:
+    POSTGRES_USER: postgres
+    POSTGRES_DB: seatwave
+    POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+  secrets:
+    - postgres_password
+  security_opt:
+    - no-new-privileges:true
+  # The entrypoint starts as root to own the data folder, then runs PostgreSQL as its own user.
+  cap_drop:
+    - ALL
+  cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
+  cpus: 2
+  mem_limit: 512m
+  # Docker's default 64 MB of shared memory is too small for parallel queries on 128 MB of buffers.
+  shm_size: 256m
+  healthcheck:
+    test: ["CMD", "pg_isready", "-U", "postgres", "-d", "seatwave"]
+    interval: 1s
+    timeout: 2s
+    retries: 600
+
+services:
+  object-store:
+    image: rustfs/rustfs:1.0.5@sha256:b81d16a90ee25bd9511280127ca1471788c6e874cf0f0da759645f46b2dc1d74
+    environment:
+      # One node, one drive: the lab needs a bucket that outlives the primary, not redundancy
+      # inside the store (Module 29 rehearses that).
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: "0.0.0.0:9000"
+      RUSTFS_CONSOLE_ENABLE: "false"
+      RUSTFS_ACCESS_KEY_FILE: /run/secrets/store_access_key
+      RUSTFS_SECRET_KEY_FILE: /run/secrets/store_secret_key
+      # rustfs_cert.pem and rustfs_key.pem in this folder turn TLS on.
+      RUSTFS_TLS_PATH: /opt/tls
+      RUSTFS_OBS_LOGGER_LEVEL: warn
+    secrets:
+      - store_access_key
+      - store_secret_key
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /logs
+      - /tmp
+    cpus: 2
+    mem_limit: 384m
+    volumes:
+      - backups:/data
+      - ./.secrets/tls/store:/opt/tls:ro
+    ports:
+      - "127.0.0.1:24000:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsSk", "https://127.0.0.1:9000/health"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+
+  primary:
+    <<: *postgres
+    # Archiving on: every closed segment goes to the repository; a segment with data closes after
+    # at most 60 s (archive_timeout), which bounds the recovery point of a restore from the archive.
+    # wal_level=logical (a superset of replica) lets the pilot-light copy subscribe, and
+    # track_commit_timestamp lets the load generator record each confirm's exact commit time, which
+    # is the time a recovery target is compared with.
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=seatwave archive-push %p
+      - -c
+      - archive_timeout=60
+      - -c
+      - track_commit_timestamp=on
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_wal_size=2GB
+    mem_limit: 768m
+    secrets:
+      - postgres_password
+      - owner_password
+      - app_password
+      - replicator_password
+    volumes:
+      - primary-data:/var/lib/postgresql
+      # Runs once, when the data volume is new: the application role, then the bookings tables.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/V40_1__bookings.sql:/seatwave/V40_1__bookings.sql:ro
+      - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ./.secrets/pgbackrest:/etc/pgbackrest/conf.d:ro
+      - ./.secrets/tls/ca.pem:/etc/seatwave-tls/ca.pem:ro
+    ports:
+      - "127.0.0.1:24010:5432"
+
+  restore-target:
+    <<: *postgres
+    # Created empty by scripts/restore-drill.sh, which restores into its volume and only then lets
+    # PostgreSQL start. It never archives: a restored copy must not write into the repository.
+    profiles: ["drill"]
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_wal_size=2GB
+    volumes:
+      - restore-data:/var/lib/postgresql
+      - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ./.secrets/pgbackrest:/etc/pgbackrest/conf.d:ro
+      - ./.secrets/tls/ca.pem:/etc/seatwave-tls/ca.pem:ro
+    ports:
+      - "127.0.0.1:24011:5432"
+
+  region-b-copy:
+    <<: *postgres
+    # The pilot light's copy: a second PostgreSQL that subscribes to the primary's bookings tables.
+    # On this machine it stands in for region-b while sharing the primary's disk and network.
+    profiles: ["pilot-light"]
+    secrets:
+      - postgres_password
+      - owner_password
+      - app_password
+      - replicator_password
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+    volumes:
+      - region-b-data:/var/lib/postgresql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/V40_1__bookings.sql:/seatwave/V40_1__bookings.sql:ro
+    ports:
+      - "127.0.0.1:24012:5432"
+
+secrets:
+  store_access_key:
+    file: ./.secrets/store-access-key
+  store_secret_key:
+    file: ./.secrets/store-secret-key
+  postgres_password:
+    file: ./.secrets/postgres.password
+  owner_password:
+    file: ./.secrets/owner.password
+  app_password:
+    file: ./.secrets/app.password
+  replicator_password:
+    file: ./.secrets/replicator.password
+
+volumes:
+  primary-data:
+  restore-data:
+  region-b-data:
+  backups:
